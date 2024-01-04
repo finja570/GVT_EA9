@@ -1,0 +1,194 @@
+<!DOCTYPE html5>
+<html>
+	<head>
+		<meta charset="utf-8"/>
+		<title>Einsendeaufgabe 9: Torustextur</title>
+		<link rel="stylesheet" href="style.css">
+
+		<script src="ext/gl-matrix.js"></script>
+		<script src="GVT_Src_vertexData_torus.js"></script>
+		<script src="TXR_Src_tpl.js"></script>
+
+		<script type="x-shader/x-vertex" id="vertexshader">
+			attribute vec3 aPosition;
+			attribute vec3 aNormal;
+			attribute vec2 aTextureCoord;
+
+			uniform mat4 uPMatrix;
+			uniform mat4 uMVMatrix;
+			uniform mat3 uNMatrix;
+			
+			varying vec3 vNormal;
+			varying vec4 vPosition;
+			
+			varying vec2 vTextureCoord;
+
+			void main(){
+				// Calculte vertex position in eye coordinates. 
+				vec4 tPosition = uMVMatrix * vec4(aPosition, 1.0);
+				// Calculate projektion.
+				gl_Position = uPMatrix * tPosition;
+	
+				vec3 tNormal = normalize(uNMatrix * aNormal);
+				tNormal = uNMatrix * aNormal;
+				
+				vPosition = tPosition;
+				vNormal = tNormal;				
+				vTextureCoord = aTextureCoord;		
+			}
+		</script>
+
+		<script type="x-shader/x-fragment" id="fragmentshader">
+			precision mediump float;
+			
+			uniform sampler2D uTexture;
+			
+			varying vec2 vTextureCoord;
+			varying vec3 vNormal;
+			varying vec4 vPosition;
+			
+			// Material.
+			struct PhongMaterial {
+				vec3 ka;
+				vec3 kd;
+				vec3 ks;
+				float ke; 
+			};
+			uniform PhongMaterial material;
+			
+			// Ambient light.
+			uniform vec3 ambientLight;
+			
+			// Pointlights.
+			const int MAX_LIGHT_SOURCES = 8;
+			struct LightSource {
+				bool isOn;
+				vec3 position;
+				vec3 color;
+			};
+			uniform LightSource light[MAX_LIGHT_SOURCES];
+			
+			// Phong illumination for single light source,
+			// no ambient light.
+			vec3 phong(vec3 p, vec3 n, vec3 v, LightSource l) {
+			
+				vec3 L = l.color;
+			
+				vec3 s = normalize(l.position - p);
+				vec3 r = reflect(-s, n);
+				
+				float sn = max( dot(s,n), 0.0);
+				float rv = max( dot(r,v), 0.0);
+							
+				vec3 diffuse = material.kd * L * sn;								
+				vec3 specular = material.ks * L * pow(rv, material.ke);
+			
+				return diffuse + specular;			
+			}
+			
+			// Phong illumination for multiple light sources
+			vec3 phong(vec3 p, vec3 n, vec3 v) {
+			
+				// Calculate ambient light.
+				vec3 result = material.ka * ambientLight;
+				
+				// Add light from all light sources.
+				for(int j=0; j < MAX_LIGHT_SOURCES; j++){
+					if(light[j].isOn){
+						result += phong(p, n, v, light[j]);
+					}
+				}
+				return result;
+			}
+
+            // Prozedurale Textur
+            
+            float circular_gradient(float scale) {
+                float s = vTextureCoord.s;
+                float t = vTextureCoord.t;
+                float PI = 3.141592653589793;
+                float percent = abs(sin(s * scale * PI)) * abs(sin(t * scale * PI));
+                float percent2 = abs(sin((1. - s) * scale * PI)) * abs(sin((1. - t) * scale * PI));
+                return percent + percent2;
+            }
+			
+			void main() {
+				// Calculate view vector.
+				// For ortho projection:
+				vec3 v = vec3(0,0,-1);
+                vec4 tColor = vec4(0, 0, 0, 1);
+				
+				vec3 vNormal = normalize(vNormal);
+
+                //Prozedurale Textur
+                  
+                const int n = 5;
+                float scale = 1.;
+                float incPercent = 0.0;
+
+                for (int j=0; j<n; j++) {
+                    incPercent += (1.0/float(n)) * circular_gradient(scale);
+                    scale *= 2.0;
+                }
+        
+                tColor = vec4(.6, .1, .67, 1.) * incPercent;
+
+				vec4 lighting = vec4( phong(vPosition.xyz, vNormal, v), 1.0);
+				
+				gl_FragColor = tColor * lighting;
+			}			
+		</script>
+	</head>
+	<body onload="app.start()">
+			<h1>Einsendeaufgabe 9: Torustextur</h1>
+            <h2> Prozedurale Textur</h2>
+
+			<canvas id="canvas" width="500" height="500"></canvas>
+            
+            <div class="container">
+                <a href="http://learnwebgl.brown37.net/10_surface_properties/texture_mapping_procedural.html"> Inspiration für die Textur</a>
+            </div>
+            
+            <div class="container">
+			    <a href="index.html" class="button">Zurück zur Bildtextur</a>
+            </div>    
+
+			<h2> Interaktionen: </h2>
+			<table>
+				<tr>
+				  <th>Taste</th>
+				  <th>Aktion</th>
+				</tr>
+				
+				<tr>
+					<th>P,F,O</th>
+					<th>Veränderung der Projektion (perspective, frustum, ortho)</th>
+				</tr>
+				<tr>
+					<th>C/Shift-C</th>
+					<th>Drehung der Kamera um die Y-Achse</th>
+				</tr>
+				<tr>
+					<th>H/Shift-H</th>
+					<th>Bewegung der Kamera nach oben/unten</th>
+				</tr>
+				<tr>
+					<th>D/Shift-D</th>
+					<th>Bewegung der Kamera von der Mitte weg/ zur Mitte hin</th>
+				</tr>
+				<tr>
+					<th>V/Shift-V</th>
+					<th>Bewegung der Kamera im Bogenmaß (nur in folgender Projektionen möglich: perspective)</th>
+				</tr>
+				<tr>
+					<th>B/Shift-B</th>
+					<th>Abmessungen der kameranahen Ebene (nur in folgenden Projektionen möglich: frustum, ortho)</th>
+				</tr>
+				<tr>
+					<th>X/Y/Z</th>
+					<th>Bewegung des Torus um die entsprechende Achse</th>
+				</tr>
+			</table>
+			
+	</body>
+</html>
